@@ -14,6 +14,8 @@ app.use('*', cors());
 // login
 app.post('/api/login', async (c) => {
 	const { password } = await c.req.json<{ password: string }>();
+	console.log('Entered password:', password);
+	console.log('Server ADMIN_PASSWORD:', c.env.ADMIN_PASSWORD);
 	if (password !== c.env.ADMIN_PASSWORD) {
 		return c.json({ error: 'Unauthorized' }, 401);
 	}
