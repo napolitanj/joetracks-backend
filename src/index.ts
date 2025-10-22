@@ -114,4 +114,6 @@ app.put('/api/pages', requireAuth, async (c) => {
 	return c.json({ ok: true, updated_at: now });
 });
 
+app.get('/api/health', (c) => c.text('ok'));
+
 export default app;
