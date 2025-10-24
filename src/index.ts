@@ -87,14 +87,25 @@ app.get('/api/pages', requireAuth, async (c) => {
 
 	const row = await c.env.DB.prepare(`SELECT id, site_id, path, data, updated_at FROM pages WHERE site_id=? AND path=?`)
 		.bind(siteId, path)
-		.first<any>();
+		.first();
 
 	if (!row) return c.json({ error: 'Not found' }, 404);
+
 	const page = {
 		...row,
 		data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data,
 	};
+
 	return c.json(page);
+});
+
+// new route: portfolio
+app.get('/api/portfolio', async (c) => {
+	const { results } = await c.env.DB.prepare(
+		`SELECT id, title, description, imageUrl, link, link_text AS linkText 
+     FROM portfolio ORDER BY id DESC`
+	).all();
+	return c.json(results);
 });
 
 // upsert page

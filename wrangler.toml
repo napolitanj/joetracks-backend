@@ -1,0 +1,8 @@
+name = "joetracks-backend"
+main = "src/index.ts"
+compatibility_date = "2024-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "joetracks"
+database_id = "3c7c5b7f-d4c0-42b9-a6fe-84b8869a4662"
