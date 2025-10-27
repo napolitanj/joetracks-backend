@@ -2,20 +2,13 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { sign, verify } from 'hono/jwt';
 
-type Env = {
-	DB: D1Database;
-	ADMIN_PASSWORD: string;
-	JWT_SECRET: string;
-};
-
 const app = new Hono<{ Bindings: Env }>();
+
 app.use('*', cors());
 
 // login
 app.post('/api/login', async (c) => {
 	const { password } = await c.req.json<{ password: string }>();
-	console.log('Entered password:', password);
-	console.log('Server ADMIN_PASSWORD:', c.env.ADMIN_PASSWORD);
 	if (password !== c.env.ADMIN_PASSWORD) {
 		return c.json({ error: 'Unauthorized' }, 401);
 	}
@@ -106,6 +99,76 @@ app.get('/api/portfolio', async (c) => {
      FROM portfolio ORDER BY id DESC`
 	).all();
 	return c.json(results);
+});
+
+// add portfolio
+app.post('/api/portfolio', requireAuth, async (c) => {
+	const body = await c.req.json();
+	const { title, description, imageUrl, link, linkText } = body;
+
+	await c.env.DB.prepare(
+		`INSERT INTO portfolio (title, description, imageUrl, link, link_text)
+     VALUES (?, ?, ?, ?, ?)`
+	)
+		.bind(title, description, imageUrl, link, linkText)
+		.run();
+
+	return c.json({ success: true });
+});
+
+// update portfolio
+app.put('/api/portfolio/:id', requireAuth, async (c) => {
+	const id = c.req.param('id');
+	const body = await c.req.json();
+	const { title, description, imageUrl, link, linkText } = body;
+
+	await c.env.DB.prepare(
+		`UPDATE portfolio
+     SET title = ?, description = ?, imageUrl = ?, link = ?, link_text = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+	)
+		.bind(title, description, imageUrl, link, linkText, id)
+		.run();
+
+	return c.json({ success: true });
+});
+
+// delete portfolio
+app.delete('/api/portfolio/:id', requireAuth, async (c) => {
+	const id = c.req.param('id');
+
+	await c.env.DB.prepare(`DELETE FROM portfolio WHERE id = ?`).bind(id).run();
+
+	return c.json({ success: true });
+});
+
+import { v4 as uuidv4 } from 'uuid';
+
+app.post('/api/upload', requireAuth, async (c) => {
+	const contentType = c.req.header('content-type') || '';
+	if (!contentType.startsWith('multipart/form-data')) {
+		return c.json({ error: 'Invalid content type' }, 400);
+	}
+
+	const formData = await c.req.formData();
+	const file = formData.get('file');
+	if (!file || typeof file === 'string') {
+		return c.json({ error: 'No file uploaded' }, 400);
+	}
+
+	// Create unique filename
+	const extension = file.name.split('.').pop();
+	const key = `${uuidv4()}.${extension}`;
+
+	// Upload to R2
+	await c.env.R2_BUCKET.put(key, file.stream(), {
+		httpMetadata: { contentType: file.type },
+	});
+
+	// Construct the public URL using your R2 public domain
+	const publicUrl = `https://pub-59c9aabb45a74ed489e0eaea1802c581.r2.dev/${key}`;
+
+	return c.json({ success: true, url: publicUrl });
 });
 
 // upsert page
