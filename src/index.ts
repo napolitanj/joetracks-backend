@@ -4,7 +4,14 @@ import { sign, verify } from 'hono/jwt';
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.use('*', cors());
+app.use(
+	'*',
+	cors({
+		origin: '*',
+		allowHeaders: ['Authorization', 'Content-Type'],
+		allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+	})
+);
 
 // login
 app.post('/api/login', async (c) => {
