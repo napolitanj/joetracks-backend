@@ -1,3 +1,5 @@
+account_id = "9faa1feec5445d31ebedeccd85782437"
+
 name = "joetracks-backend"
 main = "src/index.ts"
 compatibility_date = "2024-10-01"

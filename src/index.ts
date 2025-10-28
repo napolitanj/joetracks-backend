@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { sign, verify } from 'hono/jwt';
+import { D1Database, R2Bucket } from '@cloudflare/workers-types';
+import { v4 as uuidv4 } from 'uuid';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -13,18 +15,28 @@ app.use(
 	})
 );
 
+type Env = {
+	DB: D1Database;
+	ADMIN_PASSWORD: string;
+	JWT_SECRET: string;
+	R2_BUCKET: R2Bucket;
+};
+
 // login
 app.post('/api/login', async (c) => {
-	const { password } = await c.req.json<{ password: string }>();
-	if (password !== c.env.ADMIN_PASSWORD) {
-		return c.json({ error: 'Unauthorized' }, 401);
+	try {
+		const { password } = await c.req.json<{ password: string }>();
+		if (password !== c.env.ADMIN_PASSWORD) {
+			return c.json({ error: 'Unauthorized' }, 401);
+		}
+
+		const exp = Math.floor(Date.now() / 1000) + 60 * 60;
+		const token = await sign({ admin: true, exp }, c.env.JWT_SECRET);
+
+		return c.json({ token, expires_in: '1h' });
+	} catch (err) {
+		return c.json({ error: 'Internal Server Error', details: String(err) }, 500);
 	}
-
-	// Expire in 1 hour (3600 seconds)
-	const exp = Math.floor(Date.now() / 1000) + 60 * 60;
-
-	const token = await sign({ admin: true, exp }, c.env.JWT_SECRET);
-	return c.json({ token, expires_in: '1h' });
 });
 
 // Verify an existing JWT
@@ -149,8 +161,6 @@ app.delete('/api/portfolio/:id', requireAuth, async (c) => {
 	return c.json({ success: true });
 });
 
-import { v4 as uuidv4 } from 'uuid';
-
 app.post('/api/upload', requireAuth, async (c) => {
 	const contentType = c.req.header('content-type') || '';
 	if (!contentType.startsWith('multipart/form-data')) {
@@ -158,8 +168,9 @@ app.post('/api/upload', requireAuth, async (c) => {
 	}
 
 	const formData = await c.req.formData();
-	const file = formData.get('file');
-	if (!file || typeof file === 'string') {
+	const file = formData.get('file') as File | null;
+
+	if (!file) {
 		return c.json({ error: 'No file uploaded' }, 400);
 	}
 
@@ -168,12 +179,13 @@ app.post('/api/upload', requireAuth, async (c) => {
 	const key = `${uuidv4()}.${extension}`;
 
 	// Upload to R2
-	await c.env.R2_BUCKET.put(key, file.stream(), {
+	const arrayBuffer = await file.arrayBuffer();
+	await c.env.R2_BUCKET.put(key, arrayBuffer, {
 		httpMetadata: { contentType: file.type },
 	});
 
 	// Construct the public URL using your R2 public domain
-	const publicUrl = `https://pub-59c9aabb45a74ed489e0eaea1802c581.r2.dev/${key}`;
+	const publicUrl = `https://pub-40be4b5605764c50a95c4586fcc2b2d0.r2.dev/${key}`;
 
 	return c.json({ success: true, url: publicUrl });
 });
@@ -195,6 +207,16 @@ app.put('/api/pages', requireAuth, async (c) => {
 		.run();
 
 	return c.json({ ok: true, updated_at: now });
+});
+
+app.get('/api/test-r2', async (c) => {
+	try {
+		await c.env.R2_BUCKET.put('test.txt', 'R2 connection OK');
+		return c.text('✅ R2 bucket write succeeded');
+	} catch (err) {
+		console.error('R2 test error:', err);
+		return c.text(`❌ R2 test failed: ${err}`, 500);
+	}
 });
 
 app.get('/api/health', (c) => c.text('ok'));
