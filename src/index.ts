@@ -219,6 +219,63 @@ app.get('/api/test-r2', async (c) => {
 	}
 });
 
+// ------------------- BLOG ROUTES -------------------
+
+app.get('/api/blog', async (c) => {
+	const { results } = await c.env.DB.prepare('SELECT * FROM blog_posts ORDER BY created_at DESC').all();
+	return c.json(results);
+});
+
+app.get('/api/blog/:slug', async (c) => {
+	const slug = c.req.param('slug');
+	const post = await c.env.DB.prepare('SELECT * FROM blog_posts WHERE slug = ?').bind(slug).first();
+	if (!post) return c.json({ error: 'Not found' }, 404);
+	return c.json(post);
+});
+
+//Blog routes with auth required
+app.post('/api/blog', requireAuth, async (c) => {
+	/* create */
+});
+app.put('/api/blog/:id', requireAuth, async (c) => {
+	/* update */
+});
+app.delete('/api/blog/:id', requireAuth, async (c) => {
+	/* delete */
+});
+
+// Authenticated routes (same JWT check as your portfolio endpoints)
+app.post('/api/blog', requireAuth, async (c) => {
+	const { title, slug, content, imageUrl, published } = await c.req.json();
+	const id = crypto.randomUUID();
+	await c.env.DB.prepare(
+		`INSERT INTO blog_posts (id, title, slug, content, imageUrl, published)
+     VALUES (?, ?, ?, ?, ?, ?)`
+	)
+		.bind(id, title, slug, content, imageUrl || '', published ? 1 : 0)
+		.run();
+	return c.json({ id });
+});
+
+app.put('/api/blog/:id', requireAuth, async (c) => {
+	const id = c.req.param('id');
+	const { title, slug, content, imageUrl, published } = await c.req.json();
+	await c.env.DB.prepare(
+		`UPDATE blog_posts
+     SET title = ?, slug = ?, content = ?, imageUrl = ?, published = ?, updated_at = strftime('%s','now')
+     WHERE id = ?`
+	)
+		.bind(title, slug, content, imageUrl || '', published ? 1 : 0, id)
+		.run();
+	return c.json({ success: true });
+});
+
+app.delete('/api/blog/:id', requireAuth, async (c) => {
+	const id = c.req.param('id');
+	await c.env.DB.prepare('DELETE FROM blog_posts WHERE id = ?').bind(id).run();
+	return c.json({ success: true });
+});
+
 app.get('/api/health', (c) => c.text('ok'));
 
 export default app;
