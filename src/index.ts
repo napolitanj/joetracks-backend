@@ -5,7 +5,7 @@ import { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import { v4 as uuidv4 } from 'uuid';
 import { ski } from './routes/ski';
 import type { Env } from './types/env';
-import type { ScheduledEvent } from '@cloudflare/workers-types';
+import type { ScheduledEvent, ExecutionContext } from '@cloudflare/workers-types';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -319,8 +319,14 @@ app.get('/api/debug/run-cron', async (c) => {
 
 export default {
 	fetch: app.fetch,
-	scheduled: async (event: ScheduledEvent, env: Env, ctx: any) => {
-		const { refreshAllForecasts } = await import('./cron/refreshAllForecasts');
-		ctx.waitUntil(refreshAllForecasts(env));
+
+	scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
+		console.log('⏰ CRON RUNNING');
+
+		const { refreshAllForecasts } = await import('./services/forecast/refreshAll.js');
+
+		await refreshAllForecasts(env);
+
+		console.log('✅ CRON FINISHED');
 	},
 };
