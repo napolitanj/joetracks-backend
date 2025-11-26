@@ -4,11 +4,22 @@ name = "joetracks-backend"
 main = "src/index.ts"
 compatibility_date = "2024-10-01"
 
+# D1 database
 [[d1_databases]]
 binding = "DB"
 database_name = "joetracks"
 database_id = "3c7c5b7f-d4c0-42b9-a6fe-84b8869a4662"
 
+# R2 bucket
 [[r2_buckets]]
 binding = "R2_BUCKET"
 bucket_name = "joetracks-images"
+
+# KV namespace (must be block style)
+[[kv_namespaces]]
+binding = "WEATHER_CACHE"
+id = "152b453e5893416a8702bd6578696e0e"
+
+# Cron
+[triggers]
+crons = ["*/30 * * * *"]

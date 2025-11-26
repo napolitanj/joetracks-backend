@@ -3,6 +3,9 @@ import { cors } from 'hono/cors';
 import { sign, verify } from 'hono/jwt';
 import { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import { v4 as uuidv4 } from 'uuid';
+import { ski } from './routes/ski';
+import type { Env } from './types/env';
+import type { ScheduledEvent } from '@cloudflare/workers-types';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -14,14 +17,6 @@ app.use(
 		allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 	})
 );
-
-type Env = {
-	DB: D1Database;
-	ADMIN_PASSWORD: string;
-	JWT_SECRET: string;
-	R2_BUCKET: R2Bucket;
-};
-
 // login
 app.post('/api/login', async (c) => {
 	try {
@@ -111,22 +106,13 @@ app.get('/api/pages', requireAuth, async (c) => {
 	return c.json(page);
 });
 
-// new route: portfolio
-app.get('/api/portfolio', async (c) => {
-	const { results } = await c.env.DB.prepare(
-		`SELECT id, title, description, imageUrl, link, link_text AS linkText 
-     FROM portfolio ORDER BY id DESC`
-	).all();
-	return c.json(results);
-});
-
 // add portfolio
 app.post('/api/portfolio', requireAuth, async (c) => {
 	const body = await c.req.json();
 	const { title, description, imageUrl, link, linkText } = body;
 
 	await c.env.DB.prepare(
-		`INSERT INTO portfolio (title, description, imageUrl, link, link_text)
+		`INSERT INTO portfolio (title, description, imageUrl, link, linkText)
      VALUES (?, ?, ?, ?, ?)`
 	)
 		.bind(title, description, imageUrl, link, linkText)
@@ -143,7 +129,7 @@ app.put('/api/portfolio/:id', requireAuth, async (c) => {
 
 	await c.env.DB.prepare(
 		`UPDATE portfolio
-     SET title = ?, description = ?, imageUrl = ?, link = ?, link_text = ?, updated_at = CURRENT_TIMESTAMP
+     SET title = ?, description = ?, imageUrl = ?, link = ?, linkText = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
 	)
 		.bind(title, description, imageUrl, link, linkText, id)
@@ -221,6 +207,7 @@ app.get('/api/test-r2', async (c) => {
 
 // ------------------- BLOG ROUTES -------------------
 
+// Public blog routes
 app.get('/api/blog', async (c) => {
 	const { results } = await c.env.DB.prepare('SELECT * FROM blog_posts ORDER BY created_at DESC').all();
 	return c.json(results);
@@ -233,18 +220,7 @@ app.get('/api/blog/:slug', async (c) => {
 	return c.json(post);
 });
 
-//Blog routes with auth required
-app.post('/api/blog', requireAuth, async (c) => {
-	/* create */
-});
-app.put('/api/blog/:id', requireAuth, async (c) => {
-	/* update */
-});
-app.delete('/api/blog/:id', requireAuth, async (c) => {
-	/* delete */
-});
-
-// Authenticated routes (same JWT check as your portfolio endpoints)
+// Authenticated blog routes
 app.post('/api/blog', requireAuth, async (c) => {
 	const { title, slug, content, imageUrl, published } = await c.req.json();
 	const id = crypto.randomUUID();
@@ -276,6 +252,75 @@ app.delete('/api/blog/:id', requireAuth, async (c) => {
 	return c.json({ success: true });
 });
 
+// ------------------- PORTFOLIO ROUTES -------------------
+
+app.get('/api/portfolio/:id', async (c) => {
+	const id = c.req.param('id');
+	const result = await c.env.DB.prepare(
+		`SELECT id, title, description, imageUrl, link, linkText, category, type 
+     FROM portfolio WHERE id = ?`
+	)
+		.bind(id)
+		.first();
+
+	if (!result) return c.json({ error: 'Not found' }, 404);
+	return c.json(result);
+});
+
+app.get('/api/portfolio', async (c) => {
+	try {
+		const db = c.env.DB;
+		const category = c.req.query('category');
+
+		let result;
+
+		if (category) {
+			result = await db
+				.prepare(
+					`
+          SELECT id, title, description, imageUrl, link, linkText, category, type, sort_order
+          FROM portfolio
+          WHERE type = 'project'
+            AND LOWER(category) = LOWER(?)
+          ORDER BY sort_order ASC, id DESC;
+        `
+				)
+				.bind(category)
+				.all();
+		} else {
+			result = await db
+				.prepare(
+					`
+          SELECT id, title, description, imageUrl, link, linkText, category, type, sort_order
+          FROM portfolio
+          WHERE type = 'category'
+          ORDER BY sort_order ASC, id DESC;
+        `
+				)
+				.all();
+		}
+
+		return c.json(result.results);
+	} catch (err) {
+		console.error('Error fetching portfolio:', err);
+		return c.json({ error: 'Failed to load portfolio' }, 500);
+	}
+});
+
+app.route('/api/ski', ski);
+
 app.get('/api/health', (c) => c.text('ok'));
 
-export default app;
+app.get('/api/debug/run-cron', async (c) => {
+	const { refreshAllForecasts } = await import('./cron/refreshAllForecasts');
+	await refreshAllForecasts(c.env);
+	return c.json({ ok: true });
+});
+
+export default {
+	fetch: app.fetch,
+	scheduled: async (event: ScheduledEvent, env: Env, ctx: any) => {
+		const { refreshAllForecasts } = await import('./cron/refreshAllForecasts');
+		ctx.waitUntil(refreshAllForecasts(env));
+	},
+};
