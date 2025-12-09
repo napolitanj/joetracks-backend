@@ -17,9 +17,8 @@ export async function refreshAllForecasts(env: Env) {
 				_lastUpdated: Date.now(),
 			};
 
-			await env.WEATHER_CACHE.put(key, JSON.stringify(stamped), {
-				expirationTtl: 60 * 60, // 1 hour
-			});
+			await env.WEATHER_CACHE.put(key, JSON.stringify(stamped));
+
 
 			console.log(`✔ Updated ${resort.id}`);
 		} catch (err) {

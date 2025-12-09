@@ -7,34 +7,55 @@ import type { Env } from '../types/env';
 
 export const ski = new Hono<{ Bindings: Env }>();
 
+
+// ------------------------------------------------------
+// PUBLIC ENDPOINT — USES CACHE ONLY
+// ------------------------------------------------------
 ski.get('/forecast/:id', async (c) => {
-	const id = c.req.param('id');
-	const resort = RESORTS.find((r) => r.id === id);
+  const id = c.req.param('id');
+  const resort = RESORTS.find((r) => r.id === id);
 
-	if (!resort) return c.json({ error: 'Not found' }, 404);
+  if (!resort) return c.json({ error: 'Not found' }, 404);
 
-	const key = `forecast:${id}`;
+  const key = `forecast:${id}`;
 
-	// Try cache
-	const cached = await c.env.WEATHER_CACHE.get(key);
-	if (cached) return c.json(JSON.parse(cached));
+  const cached = await c.env.WEATHER_CACHE.get(key, 'json');
+  if (cached) return c.json(cached);
 
-	// Fresh fetch
-	const fresh = await getFreshForecast(resort);
-
-	const stamped = {
-		...fresh,
-		_lastUpdated: Date.now(),
-	};
-
-	await c.env.WEATHER_CACHE.put(key, JSON.stringify(stamped), {
-		expirationTtl: 60 * 60, // 1 hour
-	});
-
-	return c.json(stamped);
+  return c.json({
+    resort,
+    snow24h: 0,
+    snow72h: 0,
+    _lastUpdated: null,
+    note: 'Cache not populated yet',
+  });
 });
 
+
+// ------------------------------------------------------
+// PUBLIC ENDPOINT — MULTI FORECAST FROM CACHE ONLY
+// ------------------------------------------------------
 ski.get('/multi', async (c) => {
-	const all = await getMultiForecast();
-	return c.json(all);
+  const all = await getMultiForecast(c.env);
+  return c.json(all);
+});
+
+
+// ------------------------------------------------------
+// DEBUG ENDPOINT — OPTIONAL NOAA FETCHER
+// REMOVE IN PRODUCTION
+// ------------------------------------------------------
+ski.get('/debug/fresh/:id', async (c) => {
+  const id = c.req.param('id');
+  const resort = RESORTS.find((r) => r.id === id);
+
+  if (!resort) return c.json({ error: 'Not found' }, 404);
+
+  const fresh = await getFreshForecast(resort);
+
+  return c.json({
+    ...fresh,
+    _debug: true,
+    _lastUpdated: Date.now(),
+  });
 });

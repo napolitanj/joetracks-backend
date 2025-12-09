@@ -1,20 +1,26 @@
 import { RESORTS } from '../../data/michiganResorts';
-import { getFreshForecast } from './singleForecast';
+import type { Env } from '../../types/env';
 
-export async function getMultiForecast() {
-	const result: Record<string, any> = {};
+export async function getMultiForecast(env: Env) {
+  const result: Record<string, any> = {};
 
-	for (const resort of RESORTS) {
-		console.log('Fetching:', resort.id);
+  for (const resort of RESORTS) {
+    const key = `forecast:${resort.id}`;
 
-		try {
-			const forecast = await getFreshForecast(resort);
-			result[resort.id] = forecast;
-		} catch (err) {
-			console.error('Failed on', resort.id, err);
-			result[resort.id] = { error: true };
-		}
-	}
+    const cached = await env.WEATHER_CACHE.get(key, 'json');
 
-	return result;
+    if (cached) {
+      result[resort.id] = cached;
+    } else {
+      // Fallback if cron hasn’t run yet for some reason
+      result[resort.id] = {
+        resort,
+        snow24h: 0,
+        snow72h: 0,
+        _lastUpdated: null,
+      };
+    }
+  }
+
+  return result;
 }

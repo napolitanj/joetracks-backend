@@ -150,7 +150,7 @@ export const RESORTS = [
 	{
 		id: 'mont-ripley',
 		name: 'Mont Ripley',
-		region: 'Eastern UP',
+		region: 'Western UP',
 		lat: 47.131447,
 		lon: -88.560631,
 	},

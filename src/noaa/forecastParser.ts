@@ -1,57 +1,79 @@
+function extractSnowInches(text: string): number {
+  const t = text.toLowerCase();
+
+  // Most specific → least specific
+
+  // "new snow accumulation of around an inch possible"
+  if (t.includes("new snow accumulation of around an inch")) return 1;
+
+  // "new snow accumulation of around X inches possible"
+  let m = t.match(/new snow accumulation of around (\d+(\.\d+)?) inches?/i);
+  if (m) return parseFloat(m[1]);
+
+  // "new snow accumulation of X to Y inches possible"
+  m = t.match(/new snow accumulation of (\d+(\.\d+)?) to (\d+(\.\d+)?) inches?/i);
+  if (m) {
+    const lo = parseFloat(m[1]);
+    const hi = parseFloat(m[3]);
+    return (lo + hi) / 2;
+  }
+
+  // "new snow accumulation of up to X inches possible"
+  m = t.match(/new snow accumulation of up to (\d+(\.\d+)?) inches?/i);
+  if (m) {
+    const hi = parseFloat(m[1]);
+    return hi * 0.7; // heuristic: expect ~70% of "up to"
+  }
+
+  // "less than half an inch"
+  if (t.includes("less than half an inch")) return 0.25;
+
+  // "less than an inch"
+  if (t.includes("less than an inch")) return 0.5;
+
+  return 0;
+}
+
 export function parseSnowFromForecast(daily: any) {
-	const periods = daily?.properties?.periods;
-	if (!periods) return { snow24h: 0, snow72h: 0 };
+  const periods = daily?.properties?.periods;
+  if (!periods) return { snow24h: 0, snow72h: 0 };
 
-	const now = new Date().getTime();
-	const h24 = now + 24 * 60 * 60 * 1000;
-	const h72 = now + 72 * 60 * 60 * 1000;
+  const now = Date.now();
+  const h24 = now + 24 * 60 * 60 * 1000;
+  const h72 = now + 72 * 60 * 60 * 1000;
 
-	let snow24 = 0;
-	let snow72 = 0;
+  let snow24 = 0;
+  let snow72 = 0;
 
-	for (const p of periods) {
-		const start = new Date(p.startTime).getTime();
-		if (start > h72) break;
+  for (const p of periods) {
+    const start = new Date(p.startTime).getTime();
+    if (start > h72) break;
 
-		const text = p.detailedForecast ?? '';
+    const text = p.detailedForecast ?? "";
+    const inches = extractSnowInches(text);
 
-		// single amount e.g. "3 inches possible"
-		const single = text.match(/new snow accumulation of around (\d+) inches/i);
-		if (single) {
-			const v = parseFloat(single[1]);
-			if (start <= h24) snow24 += v;
-			snow72 += v;
-			continue;
-		}
+    if (!inches) {
+      console.log(`[SNOW] ${p.name} (${p.startTime}) -> 0" | no match`);
+      continue;
+    }
 
-		// range e.g. "3 to 7 inches"
-		const range = text.match(/new snow accumulation of (\d+) to (\d+) inches/i);
-		if (range) {
-			const avg = (parseFloat(range[1]) + parseFloat(range[2])) / 2;
-			if (start <= h24) snow24 += avg;
-			snow72 += avg;
-			continue;
-		}
+    const in24 = start <= h24;
 
-		// less than half an inch
-		const lessHalf = text.match(/less than half an inch/i);
-		if (lessHalf) {
-			if (start <= h24) snow24 += 0.25;
-			snow72 += 0.25;
-			continue;
-		}
+    console.log(
+      `[SNOW] ${p.name} (${p.startTime}) -> +${inches}" | in24=${in24} | text="${text.slice(
+        0,
+        120
+      )}..."`
+    );
 
-		// less than one inch
-		const lessOne = text.match(/less than an inch/i);
-		if (lessOne) {
-			if (start <= h24) snow24 += 0.5;
-			snow72 += 0.5;
-			continue;
-		}
-	}
+    if (in24) snow24 += inches;
+    snow72 += inches;
+  }
 
-	return {
-		snow24h: Math.round(snow24 * 10) / 10,
-		snow72h: Math.round(snow72 * 10) / 10,
-	};
+  const snow24h = Math.round(snow24 * 10) / 10;
+  const snow72h = Math.round(snow72 * 10) / 10;
+
+  console.log(`[SNOW TOTALS] 24h=${snow24h}", 72h=${snow72h}"`);
+
+  return { snow24h, snow72h };
 }

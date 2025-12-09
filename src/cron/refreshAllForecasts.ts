@@ -3,21 +3,27 @@ import { getFreshForecast } from '../services/forecast/singleForecast';
 import type { Env } from '../types/env';
 
 export async function refreshAllForecasts(env: Env) {
-	console.log('Refreshing ALL resort forecasts…');
+  console.log('🔄 Refreshing ALL resort forecasts…');
 
-	for (const resort of RESORTS) {
-		try {
-			const data = await getFreshForecast(resort);
+  for (const resort of RESORTS) {
+    const key = `forecast:${resort.id}`;
 
-			await env.WEATHER_CACHE.put(`forecast:${resort.id}`, JSON.stringify(data), {
-				expirationTtl: 60 * 60 * 12,
-			});
+    try {
+      const fresh = await getFreshForecast(resort);
 
-			console.log('✔ updated', resort.id);
-		} catch (err) {
-			console.error('❌ failed', resort.id, err);
-		}
-	}
+      const stamped = {
+        ...fresh,
+        _lastUpdated: Date.now(),
+      };
 
-	console.log('Done.');
+      // No TTL – let cron overwrite on the next run
+      await env.WEATHER_CACHE.put(key, JSON.stringify(stamped));
+
+      console.log('✔ updated', resort.id);
+    } catch (err) {
+      console.error('❌ failed', resort.id, err);
+    }
+  }
+
+  console.log('✅ Done refreshing all resorts.');
 }
