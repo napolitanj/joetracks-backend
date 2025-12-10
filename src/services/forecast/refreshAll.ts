@@ -1,30 +1,31 @@
-import { RESORTS } from '../../data/michiganResorts';
+import { getResortsByRegion, type Region } from './getResortsByRegion';
 import { getFreshForecast } from './singleForecast';
-
 import type { Env } from '../../types/env';
 
-export async function refreshAllForecasts(env: Env) {
-	console.log('🔄 Refreshing ALL ski forecasts...');
+export async function refreshAllForecasts(env: Env, region: Region) {
+  const resorts = getResortsByRegion(region);
 
-	for (const resort of RESORTS) {
-		const key = `forecast:${resort.id}`;
+  console.log(`🔄 Refreshing region "${region}" (count=${resorts.length})`);
 
-		try {
-			const fresh = await getFreshForecast(resort);
+  for (const resort of resorts) {
+    const key = `forecast:${resort.id}`;
 
-			const stamped = {
-				...fresh,
-				_lastUpdated: Date.now(),
-			};
+    try {
+      const fresh = await getFreshForecast(resort);
 
-			await env.WEATHER_CACHE.put(key, JSON.stringify(stamped));
+      const stamped = {
+        ...fresh,
+        _lastUpdated: Date.now(),
+      };
 
+      // No TTL – keep until next cron overwrite
+      await env.WEATHER_CACHE.put(key, JSON.stringify(stamped));
 
-			console.log(`✔ Updated ${resort.id}`);
-		} catch (err) {
-			console.log(`❌ Failed to refresh ${resort.id}`, err);
-		}
-	}
+      console.log(`✔ Updated ${resort.id}`);
+    } catch (err) {
+      console.log(`❌ Failed to refresh ${resort.id}`, err);
+    }
+  }
 
-	console.log('🎉 All forecasts refreshed');
+  console.log(`🎉 Region "${region}" refreshed`);
 }

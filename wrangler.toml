@@ -22,4 +22,9 @@ id = "152b453e5893416a8702bd6578696e0e"
 
 # Cron
 [triggers]
-crons = ["0 5 * * *", "0 17 * * *"]
+crons = [
+  "0 9 * * *",    # 4:00 AM EST — Western UP
+  "5 9 * * *",    # 4:05 AM EST — Eastern UP
+  "10 9 * * *",   # 4:10 AM EST — Northern LP
+  "15 9 * * *",   # 4:15 AM EST — Southern LP
+]

@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { sign, verify } from 'hono/jwt';
-import { D1Database, R2Bucket } from '@cloudflare/workers-types';
+import { refreshAllForecasts } from './services/forecast/refreshAll';
 import { v4 as uuidv4 } from 'uuid';
 import { ski } from './routes/ski';
 import type { Env } from './types/env';
-import type { ScheduledEvent, ExecutionContext } from '@cloudflare/workers-types';
+import type { Region } from './services/forecast/getResortsByRegion';
+
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -311,22 +312,55 @@ app.route('/api/ski', ski);
 
 app.get('/api/health', (c) => c.text('ok'));
 
-app.get('/api/debug/run-cron', async (c) => {
-	const { refreshAllForecasts } = await import('./cron/refreshAllForecasts');
-	await refreshAllForecasts(c.env);
-	return c.json({ ok: true });
+app.get('/api.debug/run-cron', async (c) => {
+  const raw = (c.req.query('region') ?? '').toLowerCase();
+
+  const map: Record<string, Region> = {
+    'western-up': 'Western UP',
+    'eastern-up': 'Eastern UP',
+    'northern-lp': 'Northern LP',
+    'southern-lp': 'Southern LP',
+  };
+
+  const region = map[raw] ?? 'Western UP';
+
+  await refreshAllForecasts(c.env, region);
+
+  return c.json({ ok: true, region });
 });
 
 export default {
-	fetch: app.fetch,
+  fetch(request: Request, env: Env, ctx: any) {
+    return app.fetch(request, env, ctx);
+  },
 
-	scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
-		console.log('⏰ CRON RUNNING');
+  async scheduled(event: any, env: Env, ctx: any) {
+    let region: Region | null = null;
 
-		const { refreshAllForecasts } = await import('./services/forecast/refreshAll.js');
+    switch (event.cron) {
+      case '0 9 * * *':
+        region = 'Western UP';
+        break;
 
-		await refreshAllForecasts(env);
+      case '5 9 * * *':
+        region = 'Eastern UP';
+        break;
 
-		console.log('✅ CRON FINISHED');
-	},
+      case '10 9 * * *':
+        region = 'Northern LP';
+        break;
+
+      case '15 9 * * *':
+        region = 'Southern LP';
+        break;
+
+      default:
+        console.log('Unknown cron:', event.cron);
+        return;
+    }
+
+    ctx.waitUntil(refreshAllForecasts(env, region));
+  },
 };
+
+
