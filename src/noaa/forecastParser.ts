@@ -37,12 +37,17 @@ function extractSnowInches(text: string): number {
 
   // ---- NUMERIC PATTERNS ----
 
-  // "new snow accumulation of X to Y inches possible" (but allow junk between)
+  // "new snow accumulation of X to Y inches possible"
   m = t.match(/new snow accumulation of[^0-9]*?(\d+(\.\d+)?) to (\d+(\.\d+)?) inches?/);
   if (m) {
     const lo = parseFloat(m[1]);
     const hi = parseFloat(m[3]);
-    return (lo + hi) / 2;
+
+    // Bias toward the low end:
+    // expected = lo + 0.35 * (hi - lo)
+    // 1–3" -> 1.7", 2–4" -> 2.7", 1–2" -> 1.35"
+    const expected = lo + 0.35 * (hi - lo);
+    return expected;
   }
 
   // "new snow accumulation of around X inches possible"
@@ -90,21 +95,43 @@ export function parseSnowFromForecast(daily: any) {
     const start = new Date(p.startTime).getTime();
     if (start > h72) break;
 
-    const text = p.detailedForecast ?? "";
-    const inches = extractSnowInches(text);
+    const text = p.detailedForecast ?? '';
+    const baseInches = extractSnowInches(text);
+
+    if (!baseInches) {
+      console.log(`[SNOW] ${p.name} (${p.startTime}) -> 0" | no match`);
+      continue;
+    }
+
+    const prob = typeof p.probabilityOfPrecipitation?.value === 'number'
+      ? p.probabilityOfPrecipitation.value
+      : null;
+
+    let weight = 1;
+
+    if (prob !== null) {
+      if (prob < 40) {
+        weight = 0;        // too uncertain, ignore
+      } else if (prob < 70) {
+        weight = 0.6;      // partial credit for "chance"
+      } else {
+        weight = 1;        // "likely" / "snow showers" etc.
+      }
+    }
+
+    const inches = baseInches * weight;
 
     if (!inches) {
-      console.log(`[SNOW] ${p.name} (${p.startTime}) -> 0" | no match`);
+      console.log(
+        `[SNOW] ${p.name} (${p.startTime}) -> 0" | filtered (prob=${prob})`
+      );
       continue;
     }
 
     const in24 = start <= h24;
 
     console.log(
-      `[SNOW] ${p.name} (${p.startTime}) -> +${inches}" | in24=${in24} | text="${text.slice(
-        0,
-        120
-      )}..."`
+      `[SNOW] ${p.name} (${p.startTime}) -> +${inches}" | in24=${in24} | prob=${prob} | text="${text.slice(0, 120)}..."`
     );
 
     if (in24) snow24 += inches;
@@ -118,3 +145,4 @@ export function parseSnowFromForecast(daily: any) {
 
   return { snow24h, snow72h };
 }
+
