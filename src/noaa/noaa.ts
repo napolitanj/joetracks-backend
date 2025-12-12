@@ -33,17 +33,3 @@ export async function getNOAAForecast(gridId: string, gridX: number, gridY: numb
 
 	return await resp.json();
 }
-
-export async function getNOAAHourlyForecast(gridId: string, gridX: number, gridY: number) {
-	const url = `https://api.weather.gov/gridpoints/${gridId}/${gridX},${gridY}/forecast/hourly`;
-
-	const resp = await fetch(url, {
-		headers: { 'User-Agent': 'joetracks.com (contact@joetracks.com)' },
-	});
-
-	if (!resp.ok) {
-		throw new Error(`NOAA hourly forecast API failed: ${resp.status}`);
-	}
-
-	return await resp.json();
-}
