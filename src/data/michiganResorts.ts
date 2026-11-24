@@ -4,6 +4,17 @@ export type Resort = {
 	region: string;
 	lat: number;
 	lon: number;
+
+	/**
+	 * NWS forecast grid cell for this coordinate.
+	 *
+	 * Populated by `npm run seed:grids`. Grid cells do not move, so storing
+	 * them here removes a /points lookup from every refresh. Optional so a
+	 * newly added resort still works before the script is run.
+	 */
+	gridId?: string;
+	gridX?: number;
+	gridY?: number;
 };
 
 export const RESORTS = [
@@ -13,6 +24,9 @@ export const RESORTS = [
 		region: 'Southern LP',
 		lat: 42.653994,
 		lon: -83.526642,
+		gridId: 'DTX',
+		gridX: 48,
+		gridY: 47,
 	},
 	{
 		id: 'apple-mountain',
@@ -20,6 +34,9 @@ export const RESORTS = [
 		region: 'Southern LP',
 		lat: 43.469837,
 		lon: -84.1087,
+		gridId: 'DTX',
+		gridX: 26,
+		gridY: 83,
 	},
 	{
 		id: 'bay-mountain',
@@ -27,6 +44,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 44.918657,
 		lon: -85.966285,
+		gridId: 'APX',
+		gridX: 17,
+		gridY: 53,
 	},
 	{
 		id: 'big-powderhorn',
@@ -34,6 +54,9 @@ export const RESORTS = [
 		region: 'Western UP',
 		lat: 46.505724,
 		lon: -90.092013,
+		gridId: 'MQT',
+		gridX: 66,
+		gridY: 64,
 	},
 	{
 		id: 'big-snow',
@@ -41,6 +64,9 @@ export const RESORTS = [
 		region: 'Western UP',
 		lat: 46.504714,
 		lon: -89.972214,
+		gridId: 'MQT',
+		gridX: 70,
+		gridY: 65,
 	},
 	{
 		id: 'bittersweet',
@@ -48,6 +74,9 @@ export const RESORTS = [
 		region: 'Southern LP',
 		lat: 42.465046,
 		lon: -85.761712,
+		gridId: 'GRR',
+		gridX: 39,
+		gridY: 24,
 	},
 	{
 		id: 'blackjack',
@@ -55,6 +84,9 @@ export const RESORTS = [
 		region: 'Western UP',
 		lat: 46.501497,
 		lon: -90.00396,
+		gridId: 'MQT',
+		gridX: 69,
+		gridY: 64,
 	},
 	{
 		id: 'bohemia',
@@ -62,6 +94,9 @@ export const RESORTS = [
 		region: 'Western UP',
 		lat: 47.389742,
 		lon: -88.016395,
+		gridId: 'MQT',
+		gridX: 131,
+		gridY: 109,
 	},
 	{
 		id: 'boyne-highlands',
@@ -69,6 +104,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 45.471455,
 		lon: -84.94183,
+		gridId: 'APX',
+		gridX: 49,
+		gridY: 81,
 	},
 	{
 		id: 'boyne-mountain',
@@ -76,6 +114,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 45.162621,
 		lon: -84.93722,
+		gridId: 'APX',
+		gridX: 50,
+		gridY: 67,
 	},
 	{
 		id: 'brighton',
@@ -83,6 +124,9 @@ export const RESORTS = [
 		region: 'Southern LP',
 		lat: 42.540046,
 		lon: -83.809155,
+		gridId: 'DTX',
+		gridX: 39,
+		gridY: 41,
 	},
 	{
 		id: 'caberfae',
@@ -90,6 +134,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 44.241164,
 		lon: -85.717658,
+		gridId: 'APX',
+		gridX: 27,
+		gridY: 22,
 	},
 	{
 		id: 'cannonsburg',
@@ -97,6 +144,9 @@ export const RESORTS = [
 		region: 'Southern LP',
 		lat: 43.051209,
 		lon: -85.503159,
+		gridId: 'GRR',
+		gridX: 46,
+		gridY: 51,
 	},
 	{
 		id: 'challenge-mountain',
@@ -104,6 +154,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 45.236078,
 		lon: -84.8833,
+		gridId: 'APX',
+		gridX: 52,
+		gridY: 70,
 	},
 	{
 		id: 'crystal',
@@ -111,6 +164,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 44.523019,
 		lon: -85.997428,
+		gridId: 'APX',
+		gridX: 17,
+		gridY: 34,
 	},
 	{
 		id: 'echo-valley',
@@ -118,6 +174,9 @@ export const RESORTS = [
 		region: 'Southern LP',
 		lat: 42.320044,
 		lon: -85.462056,
+		gridId: 'GRR',
+		gridX: 50,
+		gridY: 18,
 	},
 	{
 		id: 'hanson-hills',
@@ -125,6 +184,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 44.644418,
 		lon: -84.754802,
+		gridId: 'APX',
+		gridX: 58,
+		gridY: 43,
 	},
 	{
 		id: 'hickory-hills',
@@ -132,6 +194,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 44.769278,
 		lon: -85.664104,
+		gridId: 'APX',
+		gridX: 27,
+		gridY: 47,
 	},
 	{
 		id: 'indianhead',
@@ -139,6 +204,9 @@ export const RESORTS = [
 		region: 'Western UP',
 		lat: 46.504509,
 		lon: -89.970837,
+		gridId: 'MQT',
+		gridX: 70,
+		gridY: 65,
 	},
 	{
 		id: 'marquette-mountain',
@@ -146,6 +214,9 @@ export const RESORTS = [
 		region: 'Western UP',
 		lat: 46.505285,
 		lon: -87.421096,
+		gridId: 'MQT',
+		gridX: 153,
+		gridY: 68,
 	},
 	{
 		id: 'mont-ripley',
@@ -153,6 +224,9 @@ export const RESORTS = [
 		region: 'Eastern UP',
 		lat: 47.131447,
 		lon: -88.560631,
+		gridId: 'MQT',
+		gridX: 114,
+		gridY: 96,
 	},
 	{
 		id: 'mount-holiday',
@@ -160,6 +234,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 44.741475,
 		lon: -85.515047,
+		gridId: 'APX',
+		gridX: 32,
+		gridY: 46,
 	},
 	{
 		id: 'mount-holly',
@@ -167,6 +244,9 @@ export const RESORTS = [
 		region: 'Southern LP',
 		lat: 42.828282,
 		lon: -83.566298,
+		gridId: 'DTX',
+		gridX: 46,
+		gridY: 55,
 	},
 	{
 		id: 'mulligans-hollow',
@@ -174,6 +254,9 @@ export const RESORTS = [
 		region: 'Southern LP',
 		lat: 43.056251,
 		lon: -86.238867,
+		gridId: 'GRR',
+		gridX: 21,
+		gridY: 50,
 	},
 	{
 		id: 'munising-mountain',
@@ -181,6 +264,9 @@ export const RESORTS = [
 		region: 'Eastern UP',
 		lat: 46.423114,
 		lon: -86.611929,
+		gridId: 'MQT',
+		gridX: 179,
+		gridY: 66,
 	},
 	{
 		id: 'nubs',
@@ -188,6 +274,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 45.466223,
 		lon: -84.904042,
+		gridId: 'APX',
+		gridX: 50,
+		gridY: 81,
 	},
 	{
 		id: 'norway-mountain',
@@ -195,6 +284,9 @@ export const RESORTS = [
 		region: 'Western UP',
 		lat: 45.790598,
 		lon: -87.868268,
+		gridId: 'MQT',
+		gridX: 140,
+		gridY: 34,
 	},
 	{
 		id: 'otsego-resort',
@@ -202,6 +294,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 45.035817,
 		lon: -84.6504,
+		gridId: 'APX',
+		gridX: 60,
+		gridY: 61,
 	},
 	{
 		id: 'petosky-winter-sports-park',
@@ -209,6 +304,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 45.376258,
 		lon: -84.942575,
+		gridId: 'APX',
+		gridX: 49,
+		gridY: 77,
 	},
 	{
 		id: 'pine-knob',
@@ -216,6 +314,9 @@ export const RESORTS = [
 		region: 'Southern LP',
 		lat: 42.743809,
 		lon: -83.367401,
+		gridId: 'DTX',
+		gridX: 53,
+		gridY: 52,
 	},
 	{
 		id: 'pine-mountain',
@@ -223,6 +324,9 @@ export const RESORTS = [
 		region: 'Western UP',
 		lat: 45.836821,
 		lon: -88.086635,
+		gridId: 'MQT',
+		gridX: 133,
+		gridY: 36,
 	},
 	{
 		id: 'porcupine',
@@ -230,6 +334,9 @@ export const RESORTS = [
 		region: 'Western UP',
 		lat: 46.81373,
 		lon: -89.652918,
+		gridId: 'MQT',
+		gridX: 79,
+		gridY: 80,
 	},
 	{
 		id: 'shanty-creek',
@@ -237,6 +344,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 44.94723,
 		lon: -85.184356,
+		gridId: 'APX',
+		gridX: 43,
+		gridY: 56,
 	},
 	{
 		id: 'ski-brule',
@@ -244,6 +354,9 @@ export const RESORTS = [
 		region: 'Western UP',
 		lat: 46.027696,
 		lon: -88.704505,
+		gridId: 'MQT',
+		gridX: 112,
+		gridY: 44,
 	},
 	{
 		id: 'skyline',
@@ -251,6 +364,9 @@ export const RESORTS = [
 		region: 'Southern LP',
 		lat: 44.573454,
 		lon: -84.693187,
+		gridId: 'APX',
+		gridX: 60,
+		gridY: 40,
 	},
 	{
 		id: 'snow-snake',
@@ -258,6 +374,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 43.958311,
 		lon: -84.782399,
+		gridId: 'GRR',
+		gridX: 67,
+		gridY: 95,
 	},
 	{
 		id: 'swiss-valley',
@@ -265,6 +384,9 @@ export const RESORTS = [
 		region: 'Southern LP',
 		lat: 41.951503,
 		lon: -85.824561,
+		gridId: 'IWX',
+		gridX: 43,
+		gridY: 76,
 	},
 	{
 		id: 'timber-ridge',
@@ -272,6 +394,9 @@ export const RESORTS = [
 		region: 'Southern LP',
 		lat: 42.391997,
 		lon: -85.784082,
+		gridId: 'GRR',
+		gridX: 39,
+		gridY: 20,
 	},
 	{
 		id: 'treetops',
@@ -279,6 +404,9 @@ export const RESORTS = [
 		region: 'Northern LP',
 		lat: 45.038245,
 		lon: -84.592352,
+		gridId: 'APX',
+		gridX: 62,
+		gridY: 62,
 	},
 	{
 		id: 'mt-zion',
@@ -286,6 +414,9 @@ export const RESORTS = [
 		region: 'Eastern UP',
 		lat: 46.475306,
 		lon: -90.165936,
+		gridId: 'MQT',
+		gridX: 63,
+		gridY: 63,
 	},
 	{
 		id: 'valley-spur',
@@ -293,5 +424,8 @@ export const RESORTS = [
 		region: 'Eastern UP',
 		lat: 46.361962,
 		lon: -86.708609,
+		gridId: 'MQT',
+		gridX: 176,
+		gridY: 63,
 	},
 ];

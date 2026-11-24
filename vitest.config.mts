@@ -1,11 +1,10 @@
-import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
+import { defineConfig } from 'vitest/config';
 
-export default defineWorkersConfig({
+// The suite covers pure forecast-parsing logic, so it runs in plain Node
+// rather than the Workers pool. No wrangler config or bindings required,
+// which means `npm test` works from a clean checkout.
+export default defineConfig({
 	test: {
-		poolOptions: {
-			workers: {
-				wrangler: { configPath: './wrangler.jsonc' },
-			},
-		},
+		include: ['test/**/*.spec.ts'],
 	},
 });

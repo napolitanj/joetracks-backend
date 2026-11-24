@@ -21,5 +21,8 @@ binding = "WEATHER_CACHE"
 id = "152b453e5893416a8702bd6578696e0e"
 
 # Cron
+# Twice daily, in UTC. 10:00 UTC is 5am Eastern (before the morning decision),
+# 22:00 UTC is 5pm Eastern (planning tomorrow). Matches the "Updated twice
+# daily" line on the tracker page.
 [triggers]
-crons = ["*/30 * * * *"]
+crons = ["0 10,22 * * *"]

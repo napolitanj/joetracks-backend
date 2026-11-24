@@ -1,33 +1,25 @@
-import { getNOAAGridpoint, getNOAAForecast, getNOAAHourlyForecast } from '../../noaa/noaa';
-import { getNDFDSnowfall } from '../../noaa/ndfd';
-import { parseSnowFromForecast } from '../../noaa/forecastParser';
+import { getGridpointData, getNOAAGridpoint, type GridRef } from '../../noaa/noaa';
+import { extractConditions } from '../../noaa/gridpoint';
 import { normalizeForecast } from './normalize';
 import type { Resort } from '../../data/michiganResorts';
 
-export async function getFreshForecast(resort: Resort) {
-	const grid = await getNOAAGridpoint(resort.lat, resort.lon);
-
-	const daily = await getNOAAForecast(grid.gridId, grid.gridX, grid.gridY);
-
-	const hourly = await getNOAAHourlyForecast(grid.gridId, grid.gridX, grid.gridY);
-
-	let snow24h = 0;
-	let snow72h = 0;
-
-	let ndfd = null;
-	try {
-		ndfd = await getNDFDSnowfall(resort.lat, resort.lon);
-	} catch (err) {}
-
-	// If NDFD returned usable values
-	if (ndfd && (ndfd.snow24h !== null || ndfd.snow72h !== null)) {
-		snow24h = ndfd.snow24h ?? 0;
-		snow72h = ndfd.snow72h ?? 0;
-	} else {
-		const parsed = parseSnowFromForecast(daily);
-		snow24h = parsed.snow24h;
-		snow72h = parsed.snow72h;
+/**
+ * Resolve a resort's grid cell, preferring the value stored alongside the
+ * resort. Falling back to a live lookup keeps a newly added resort working
+ * before anyone runs the seed script.
+ */
+async function resolveGrid(resort: Resort): Promise<GridRef> {
+	if (resort.gridId && resort.gridX != null && resort.gridY != null) {
+		return { gridId: resort.gridId, gridX: resort.gridX, gridY: resort.gridY };
 	}
 
-	return normalizeForecast({ resort, grid, snow24h, snow72h, daily, hourly });
+	return await getNOAAGridpoint(resort.lat, resort.lon);
+}
+
+export async function getFreshForecast(resort: Resort) {
+	const grid = await resolveGrid(resort);
+	const properties = await getGridpointData(grid);
+	const conditions = extractConditions(properties);
+
+	return normalizeForecast({ resort, grid, conditions, updateTime: properties.updateTime ?? null });
 }

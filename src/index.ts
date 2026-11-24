@@ -15,7 +15,7 @@ app.use(
 		origin: '*',
 		allowHeaders: ['Authorization', 'Content-Type'],
 		allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-	})
+	}),
 );
 // login
 app.post('/api/login', async (c) => {
@@ -113,7 +113,7 @@ app.post('/api/portfolio', requireAuth, async (c) => {
 
 	await c.env.DB.prepare(
 		`INSERT INTO portfolio (title, description, imageUrl, link, linkText)
-     VALUES (?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?)`,
 	)
 		.bind(title, description, imageUrl, link, linkText)
 		.run();
@@ -130,7 +130,7 @@ app.put('/api/portfolio/:id', requireAuth, async (c) => {
 	await c.env.DB.prepare(
 		`UPDATE portfolio
      SET title = ?, description = ?, imageUrl = ?, link = ?, linkText = ?, updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`
+     WHERE id = ?`,
 	)
 		.bind(title, description, imageUrl, link, linkText, id)
 		.run();
@@ -187,7 +187,7 @@ app.put('/api/pages', requireAuth, async (c) => {
 		`INSERT INTO pages (id, site_id, path, data, updated_at)
      VALUES (?, ?, ?, json(?), ?)
      ON CONFLICT(site_id, path)
-     DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at`
+     DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at`,
 	)
 		.bind(id, body.siteId, body.path, JSON.stringify(body.data ?? {}), now)
 		.run();
@@ -226,7 +226,7 @@ app.post('/api/blog', requireAuth, async (c) => {
 	const id = crypto.randomUUID();
 	await c.env.DB.prepare(
 		`INSERT INTO blog_posts (id, title, slug, content, imageUrl, published)
-     VALUES (?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?)`,
 	)
 		.bind(id, title, slug, content, imageUrl || '', published ? 1 : 0)
 		.run();
@@ -239,7 +239,7 @@ app.put('/api/blog/:id', requireAuth, async (c) => {
 	await c.env.DB.prepare(
 		`UPDATE blog_posts
      SET title = ?, slug = ?, content = ?, imageUrl = ?, published = ?, updated_at = strftime('%s','now')
-     WHERE id = ?`
+     WHERE id = ?`,
 	)
 		.bind(title, slug, content, imageUrl || '', published ? 1 : 0, id)
 		.run();
@@ -258,7 +258,7 @@ app.get('/api/portfolio/:id', async (c) => {
 	const id = c.req.param('id');
 	const result = await c.env.DB.prepare(
 		`SELECT id, title, description, imageUrl, link, linkText, category, type 
-     FROM portfolio WHERE id = ?`
+     FROM portfolio WHERE id = ?`,
 	)
 		.bind(id)
 		.first();
@@ -283,7 +283,7 @@ app.get('/api/portfolio', async (c) => {
           WHERE type = 'project'
             AND LOWER(category) = LOWER(?)
           ORDER BY sort_order ASC, id DESC;
-        `
+        `,
 				)
 				.bind(category)
 				.all();
@@ -295,7 +295,7 @@ app.get('/api/portfolio', async (c) => {
           FROM portfolio
           WHERE type = 'category'
           ORDER BY sort_order ASC, id DESC;
-        `
+        `,
 				)
 				.all();
 		}
@@ -307,26 +307,31 @@ app.get('/api/portfolio', async (c) => {
 	}
 });
 
+/**
+ * Force a forecast refresh.
+ *
+ * Replaces the old public /api/debug/run-cron, which let anyone trigger 41
+ * upstream NWS requests. Useful right after a deploy, so the cache is warm
+ * without waiting for the next scheduled run.
+ */
+app.post('/api/ski/refresh', requireAuth, async (c) => {
+	const { refreshAllForecasts } = await import('./services/forecast/refreshAll');
+	const result = await refreshAllForecasts(c.env);
+	return c.json({ ok: true, ...result });
+});
+
 app.route('/api/ski', ski);
 
 app.get('/api/health', (c) => c.text('ok'));
-
-app.get('/api/debug/run-cron', async (c) => {
-	const { refreshAllForecasts } = await import('./cron/refreshAllForecasts');
-	await refreshAllForecasts(c.env);
-	return c.json({ ok: true });
-});
 
 export default {
 	fetch: app.fetch,
 
 	scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
-		console.log('⏰ CRON RUNNING');
+		const { refreshAllForecasts } = await import('./services/forecast/refreshAll');
 
-		const { refreshAllForecasts } = await import('./services/forecast/refreshAll.js');
-
-		await refreshAllForecasts(env);
-
-		console.log('✅ CRON FINISHED');
+		// Keep the run alive past the handler returning, so a slow NWS response
+		// cannot leave the cache half written.
+		ctx.waitUntil(refreshAllForecasts(env));
 	},
 };
