@@ -210,7 +210,7 @@ export const RESORTS = [
 	},
 	{
 		id: 'marquette-mountain',
-		name: 'Marquette Moutain Ski Area',
+		name: 'Marquette Mountain Ski Area',
 		region: 'Western UP',
 		lat: 46.505285,
 		lon: -87.421096,
@@ -221,7 +221,7 @@ export const RESORTS = [
 	{
 		id: 'mont-ripley',
 		name: 'Mont Ripley',
-		region: 'Eastern UP',
+		region: 'Western UP',
 		lat: 47.131447,
 		lon: -88.560631,
 		gridId: 'MQT',
@@ -411,7 +411,7 @@ export const RESORTS = [
 	{
 		id: 'mt-zion',
 		name: 'Mt. Zion Ski Area',
-		region: 'Eastern UP',
+		region: 'Western UP',
 		lat: 46.475306,
 		lon: -90.165936,
 		gridId: 'MQT',
