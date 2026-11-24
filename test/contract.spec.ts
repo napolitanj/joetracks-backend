@@ -34,6 +34,7 @@ const conditions = {
 	windGustMph: 28,
 	rainRisk: false,
 	thawRisk: false,
+	snowRatio: 12.5,
 };
 
 const build = () =>
@@ -41,6 +42,11 @@ const build = () =>
 		resort,
 		grid: { gridId: 'APX', gridX: 50, gridY: 67 },
 		conditions,
+		naturalBaseInches: 21.3,
+		past24h: 2.1,
+		past48h: 5.4,
+		tier: 'POWDER',
+		story: 'Test story.',
 		updateTime: '2026-11-24T15:38:45+00:00',
 	});
 
@@ -68,10 +74,32 @@ describe('ski forecast response contract', () => {
 		expect(build().resort.name).toBe('Boyne Mountain');
 	});
 
-	it('exposes the additive fields the frontend can adopt without a backend deploy', () => {
+	it('exposes the weather detail fields', () => {
 		const out = build();
-		for (const key of ['tempMaxF', 'tempMinF', 'windMph', 'windGustMph', 'rainRisk', 'thawRisk']) {
+		for (const key of ['tempMaxF', 'tempMinF', 'windMph', 'windGustMph', 'rainRisk', 'thawRisk', 'snowRatio']) {
 			expect(out).toHaveProperty(key);
 		}
+	});
+
+	it('exposes the verdict and its sentence, decided server side', () => {
+		const out = build();
+		expect(out.tier).toBe('POWDER');
+		expect(typeof out.story).toBe('string');
+		expect(out.story.length).toBeGreaterThan(0);
+	});
+
+	it('exposes natural base and the past-window deltas', () => {
+		const out = build();
+		expect(out.naturalBaseInches).toBe(21.3);
+		expect(out.past24h).toBe(2.1);
+		expect(out.past48h).toBe(5.4);
+	});
+
+	it('names the base as natural, never as a resort-reported figure', () => {
+		// The field name itself is the guard. NOHRSC models natural snow only
+		// and knows nothing about snowmaking, so a plain `base` would be read
+		// as the resort's reported depth and be wrong all December.
+		expect(build()).not.toHaveProperty('base');
+		expect(build()).not.toHaveProperty('baseDepth');
 	});
 });

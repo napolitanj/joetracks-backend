@@ -5,6 +5,7 @@ import { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import { v4 as uuidv4 } from 'uuid';
 import { ski } from './routes/ski';
 import type { Env } from './types/env';
+import type { Region } from './services/forecast/refreshAll';
 import type { ScheduledEvent, ExecutionContext } from '@cloudflare/workers-types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -315,8 +316,25 @@ app.get('/api/portfolio', async (c) => {
  * without waiting for the next scheduled run.
  */
 app.post('/api/ski/refresh', requireAuth, async (c) => {
-	const { refreshAllForecasts } = await import('./services/forecast/refreshAll');
-	const result = await refreshAllForecasts(c.env);
+	const { refreshRegion, REGION_SLUGS } = await import('./services/forecast/refreshAll');
+
+	// One region per call. All 41 resorts at two outbound calls each is 82
+	// subrequests, over Cloudflare's free-plan cap of 50 per invocation.
+	const slug = (c.req.query('region') ?? '').toLowerCase();
+	const region = REGION_SLUGS[slug];
+
+	if (!region) {
+		return c.json(
+			{
+				error: 'A region is required',
+				hint: 'POST /api/ski/refresh?region=<slug>, one call per region',
+				regions: Object.keys(REGION_SLUGS),
+			},
+			400,
+		);
+	}
+
+	const result = await refreshRegion(c.env, region);
 	return c.json({ ok: true, ...result });
 });
 
@@ -328,10 +346,36 @@ export default {
 	fetch: app.fetch,
 
 	scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
-		const { refreshAllForecasts } = await import('./services/forecast/refreshAll');
+		const { refreshRegion } = await import('./services/forecast/refreshAll');
 
-		// Keep the run alive past the handler returning, so a slow NWS response
-		// cannot leave the cache half written.
-		ctx.waitUntil(refreshAllForecasts(env));
+		// One cron entry fires at :00, :05, :10 and :15, and the scheduled minute
+		// says which region this firing owns.
+		//
+		// Two free-plan limits force this shape: 50 outbound subrequests per
+		// invocation (41 resorts x 2 calls is 82, hence the regional split), and
+		// 5 cron triggers per account (hence one entry rather than eight).
+		//
+		// The minute comes from scheduledTime, not Date.now(), because that is
+		// the time the run was scheduled for rather than whenever it actually
+		// started, which can drift.
+		const REGION_BY_MINUTE: Record<number, Region> = {
+			0: 'Western UP',
+			5: 'Eastern UP',
+			10: 'Northern LP',
+			15: 'Southern LP',
+		};
+
+		const scheduledMinute = new Date(event.scheduledTime).getUTCMinutes();
+		const slot = Math.round(scheduledMinute / 5) * 5;
+		const region = REGION_BY_MINUTE[slot];
+
+		if (!region) {
+			console.error(`Cron fired at an unmapped minute (${scheduledMinute}):`, event.cron);
+			return;
+		}
+
+		// Keep the run alive past the handler returning, so a slow upstream
+		// response cannot leave the cache half written.
+		ctx.waitUntil(refreshRegion(env, region));
 	},
 };

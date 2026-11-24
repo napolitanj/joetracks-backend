@@ -66,20 +66,47 @@ Additive fields, safe to extend: `tempMaxF`, `tempMinF`, `windMph`,
 
 ### How it works
 
-A cron runs twice daily (`0 10,22 * * *` UTC, which is 5am and 5pm Eastern)
-and writes every resort to KV.
+Each resort costs two outbound calls: the NWS raw gridpoint endpoint
+(`/gridpoints/{office}/{x},{y}`), which returns numeric time series rather than
+the English prose the `/forecast` variants give, and the NOHRSC snow analysis
+for natural snow depth at that coordinate.
 
-Each resort takes exactly one request to the NWS raw gridpoint endpoint
-(`/gridpoints/{office}/{x},{y}`), which returns numeric time series rather
-than the English prose the `/forecast` variants return. Snowfall is summed
-over real time intervals, prorating any interval that straddles the window
-edge. Parsing logic lives in `src/noaa/gridpoint.ts` and is pure, so it is
-unit tested without the worker runtime.
+**The cron is split by region, and that split is load-bearing.** A Worker on
+Cloudflare's free plan may make only 50 external subrequests per invocation.
+41 resorts at two calls each is 82, so a single run silently loses everything
+past the 25th resort. One cron entry per region keeps the largest run
+(Northern LP, 15 resorts) at 30 subrequests. The cron's minute field selects
+the region; see the scheduled handler in `src/index.ts`.
+
+Each run merges its results into `forecast:all` rather than replacing it, so a
+partial failure leaves the previous values in place and the stored set can only
+be topped up, never truncated.
+
+Snowfall is summed over real time intervals, prorating any interval that
+straddles the window edge. Density comes from dividing forecast snowfall by
+forecast liquid equivalent, which is the snow-to-liquid ratio, computed only
+above the totals where NWS quantization stops distorting it. Parsing lives in
+`src/noaa/gridpoint.ts`, the tier rules in `services/forecast/verdict.ts` and
+the sentence templates in `services/forecast/story.ts`, all pure and unit
+tested.
+
+Past-window change comes from our own depth history in KV, because no NOAA
+product serves past snowfall at a point in a format a Worker can read. It needs
+about a day of runs before 24h deltas appear and two before 48h.
 
 Grid references are stored per resort in `src/data/michiganResorts.ts`, so no
 `/points` lookup happens at refresh time. After adding a resort, run:
 
     npm run seed:grids
+
+### Manual refresh
+
+One region per call, for the same subrequest reason:
+
+    POST /api/ski/refresh?region=western-up
+
+Valid slugs: `western-up`, `eastern-up`, `northern-lp`, `southern-lp`.
+Requires a bearer token from `POST /api/login`.
 
 ### Deploying
 

@@ -130,6 +130,31 @@ export function hasLiquidPrecip(props: Record<string, GridSeries>, windowStart: 
 	return false;
 }
 
+/**
+ * Snow-to-liquid ratio: how fluffy the forecast snow is.
+ *
+ * snowfallAmount and quantitativePrecipitation are forecast on the same
+ * intervals, and QPF is liquid-equivalent, so their quotient is the density
+ * NWS is actually predicting. Around 10:1 is average; 18:1 is cold and dry;
+ * under 5:1 means most of that water is not arriving as snow at all, which
+ * catches sleet and changeover events that a temperature check alone misses.
+ *
+ * NWS quantizes QPF to hundredths of an inch, so at small totals the quotient
+ * is arithmetic noise rather than meteorology. Below these floors we return
+ * null and say nothing about density, rather than guessing.
+ */
+const SLR_MIN_LIQUID_MM = 2.5; // 0.10 inches
+const SLR_MIN_SNOW_MM = 25.4; // 1 inch
+
+export function snowToLiquidRatio(properties: Record<string, GridSeries>, windowStart: number, windowEnd: number): number | null {
+	const snow = sumOverWindow(properties.snowfallAmount, windowStart, windowEnd);
+	const liquid = sumOverWindow(properties.quantitativePrecipitation, windowStart, windowEnd);
+
+	if (liquid < SLR_MIN_LIQUID_MM || snow < SLR_MIN_SNOW_MM) return null;
+
+	return Math.round((snow / liquid) * 10) / 10;
+}
+
 export const mmToInches = (mm: number) => mm / 25.4;
 export const celsiusToF = (c: number) => (c * 9) / 5 + 32;
 export const kmhToMph = (kmh: number) => kmh / 1.609344;
@@ -151,6 +176,8 @@ export type ResortConditions = {
 	windGustMph: number | null;
 	rainRisk: boolean;
 	thawRisk: boolean;
+	/** Snow-to-liquid ratio over the next 48h, or null when too little falls to tell. */
+	snowRatio: number | null;
 };
 
 /**
@@ -185,5 +212,6 @@ export function extractConditions(properties: Record<string, GridSeries>, now: n
 		windGustMph: roundOrNull(gust.max, kmhToMph),
 		rainRisk: hasLiquidPrecip(properties, now, end48),
 		thawRisk,
+		snowRatio: snowToLiquidRatio(properties, now, end48),
 	};
 }

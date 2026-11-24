@@ -21,8 +21,19 @@ binding = "WEATHER_CACHE"
 id = "152b453e5893416a8702bd6578696e0e"
 
 # Cron
-# Twice daily, in UTC. 10:00 UTC is 5am Eastern (before the morning decision),
-# 22:00 UTC is 5pm Eastern (planning tomorrow). Matches the "Updated twice
-# daily" line on the tracker page.
+#
+# ONE trigger, eight firings. Two separate free-plan limits shape this:
+#
+#   1. A Worker may make only 50 external subrequests per invocation, and all
+#      41 resorts at two calls each is 82. So the work is split by region, the
+#      largest being Northern LP at 15 resorts / 30 subrequests.
+#   2. An account may have only 5 cron triggers. Eight separate entries is
+#      refused outright (error 10072).
+#
+# A comma list in the minute field satisfies both: this is one entry that fires
+# at :00, :05, :10 and :15 past both 10:00 and 22:00 UTC. The scheduled minute
+# selects the region; see the scheduled handler in src/index.ts.
+#
+# 10:00 UTC is 5am Eastern, 22:00 UTC is 5pm Eastern.
 [triggers]
-crons = ["0 10,22 * * *"]
+crons = ["0,5,10,15 10,22 * * *"]
