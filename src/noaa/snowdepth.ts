@@ -16,6 +16,14 @@
 
 const SERVICE = 'https://mapservices.weather.noaa.gov/raster/rest/services/snow/NOHRSC_Snow_Analysis/MapServer/identify';
 
+// Image sublayer of the Snow Depth group. Verified against a known point: the
+// service returned 0.17 for the western UP and classified it into its own
+// "3.9 - 9.8 inches" band, which is 0.17 m. So this raster reports METRES.
+//
+// The water-equivalent raster is layer 7, and it does NOT share these units: it
+// returns MILLIMETRES (24 at the same point, classified "0.39 - 0.98 inches").
+// Anything added here for water equivalent needs its own conversion. Reusing
+// METRES_TO_INCHES on it would be wrong by a factor of a thousand.
 const LAYER_SNOW_DEPTH = 3;
 const METRES_TO_INCHES = 39.3701;
 
