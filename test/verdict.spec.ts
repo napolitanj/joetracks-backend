@@ -1,14 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { decideTier, describeDensity, isWindHold, THIN_BASE_INCHES } from '../src/services/forecast/verdict';
+import { decideTier, describeDensity, describeSnowpackTrend, isWindHold } from '../src/services/forecast/verdict';
 
 const base = {
 	snow48h: 0,
 	tempMaxF: 25,
 	windGustMph: 10,
 	rainRisk: false,
-	thawRisk: false,
 	snowRatio: null as number | null,
-	naturalBaseInches: 30 as number | null,
 };
 const t = (over: Partial<typeof base> = {}) => decideTier({ ...base, ...over });
 
@@ -50,7 +48,6 @@ describe('thaw', () => {
 	});
 
 	it('does NOT override a real snow event', () => {
-		// A marginal warm spell during a dump should not relabel the day.
 		expect(t({ snow48h: 9, tempMaxF: 36 })).toBe('POWDER');
 	});
 
@@ -59,29 +56,27 @@ describe('thaw', () => {
 	});
 });
 
-describe('thin', () => {
-	it('fires on a low natural base with nothing coming', () => {
-		expect(t({ snow48h: 0, naturalBaseInches: THIN_BASE_INCHES - 1 })).toBe('THIN');
-	});
-
-	it('does NOT fire when snow is on the way, since the base is about to change', () => {
-		expect(t({ snow48h: 6, naturalBaseInches: 4 })).toBe('GOOD');
-	});
-
-	it('does not fire when the base is adequate', () => {
-		expect(t({ snow48h: 0, naturalBaseInches: THIN_BASE_INCHES })).toBe('FIRM');
-	});
-
-	it('stays quiet when NOHRSC gave us nothing rather than guessing', () => {
-		expect(t({ snow48h: 0, naturalBaseInches: null })).toBe('FIRM');
+describe('there is no thin-base tier', () => {
+	// SNODAS is wrong by multiples at resort scale in both directions, so no
+	// threshold can be hung on it. Re-adding one needs a better data source.
+	it('never returns THIN', () => {
+		const tiers = new Set<string>();
+		for (const snow of [0, 1, 3, 7, 15]) {
+			for (const temp of [10, 25, 33, 39]) {
+				for (const rain of [true, false]) {
+					tiers.add(t({ snow48h: snow, tempMaxF: temp, rainRisk: rain }));
+				}
+			}
+		}
+		expect([...tiers]).not.toContain('THIN');
 	});
 });
 
 describe('precedence', () => {
-	it('is rain, then thaw, then thin', () => {
-		expect(t({ snow48h: 0, rainRisk: true, tempMaxF: 40, naturalBaseInches: 2 })).toBe('RAIN');
-		expect(t({ snow48h: 0, tempMaxF: 40, naturalBaseInches: 2 })).toBe('THAW');
-		expect(t({ snow48h: 0, tempMaxF: 20, naturalBaseInches: 2 })).toBe('THIN');
+	it('is rain, then thaw, then the snow tiers', () => {
+		expect(t({ snow48h: 0, rainRisk: true, tempMaxF: 40 })).toBe('RAIN');
+		expect(t({ snow48h: 0, tempMaxF: 40 })).toBe('THAW');
+		expect(t({ snow48h: 5, tempMaxF: 20 })).toBe('GOOD');
 	});
 });
 
@@ -96,6 +91,23 @@ describe('describeDensity', () => {
 
 	it('says nothing when the ratio was not computable', () => {
 		expect(describeDensity(null)).toBeNull();
+	});
+});
+
+describe('describeSnowpackTrend', () => {
+	it('reports direction past the noise floor', () => {
+		expect(describeSnowpackTrend(2)).toBe('building');
+		expect(describeSnowpackTrend(-2)).toBe('losing');
+	});
+
+	it('treats small movement as unchanged, since the model cannot resolve it', () => {
+		expect(describeSnowpackTrend(0.5)).toBe('holding');
+		expect(describeSnowpackTrend(-0.5)).toBe('holding');
+		expect(describeSnowpackTrend(0)).toBe('holding');
+	});
+
+	it('says nothing without history', () => {
+		expect(describeSnowpackTrend(null)).toBeNull();
 	});
 });
 

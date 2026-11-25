@@ -42,9 +42,9 @@ const build = () =>
 		resort,
 		grid: { gridId: 'APX', gridX: 50, gridY: 67 },
 		conditions,
-		naturalBaseInches: 21.3,
-		past24h: 2.1,
-		past48h: 5.4,
+		snowpackTrend: 'building',
+		modelDepthIn: 21.3,
+		depthChange48h: 5.4,
 		tier: 'POWDER',
 		story: 'Test story.',
 		updateTime: '2026-11-24T15:38:45+00:00',
@@ -88,18 +88,24 @@ describe('ski forecast response contract', () => {
 		expect(out.story.length).toBeGreaterThan(0);
 	});
 
-	it('exposes natural base and the past-window deltas', () => {
-		const out = build();
-		expect(out.naturalBaseInches).toBe(21.3);
-		expect(out.past24h).toBe(2.1);
-		expect(out.past48h).toBe(5.4);
+	it('exposes snowpack trend as a direction', () => {
+		expect(build().snowpackTrend).toBe('building');
 	});
 
-	it('names the base as natural, never as a resort-reported figure', () => {
-		// The field name itself is the guard. NOHRSC models natural snow only
-		// and knows nothing about snowmaking, so a plain `base` would be read
-		// as the resort's reported depth and be wrong all December.
-		expect(build()).not.toHaveProperty('base');
-		expect(build()).not.toHaveProperty('baseDepth');
+	it('publishes NO snow depth figure, under any name', () => {
+		// Checked against ground observations, the NOHRSC model reads 3-5x high
+		// around Ironwood and at or near zero in the Keweenaw where stations
+		// report 2-3 inches. Any displayable depth field invites someone to put
+		// that number on the page. The raw values stay underscore-prefixed as
+		// diagnostics; everything else is the trend direction only.
+		const out = build() as Record<string, unknown>;
+
+		for (const key of ['base', 'baseDepth', 'naturalBaseInches', 'snowDepth', 'snowDepthInches', 'past24h', 'past48h']) {
+			expect(out, `must not publish ${key}`).not.toHaveProperty(key);
+		}
+
+		const publicNumericKeys = Object.keys(out).filter((k) => !k.startsWith('_') && typeof out[k] === 'number');
+		expect(publicNumericKeys).not.toContain('depth');
+		expect(out._modelSnowDepthIn).toBe(21.3);
 	});
 });

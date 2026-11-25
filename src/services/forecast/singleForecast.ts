@@ -2,7 +2,7 @@ import { getGridpointData, getNOAAGridpoint, type GridRef } from '../../noaa/noa
 import { extractConditions } from '../../noaa/gridpoint';
 import { getNaturalSnowDepthInches } from '../../noaa/snowdepth';
 import { depthChange, type DepthReading } from './history';
-import { decideTier } from './verdict';
+import { decideTier, describeSnowpackTrend } from './verdict';
 import { buildStory } from './story';
 import { normalizeForecast } from './normalize';
 import type { Resort } from '../../data/michiganResorts';
@@ -31,8 +31,8 @@ export async function getFreshForecast(resort: Resort, options: ForecastOptions 
 	const grid = await resolveGrid(resort);
 
 	// Snow depth is a nice-to-have. If NOHRSC is down the forecast still works,
-	// the story just loses its base clause.
-	const [properties, naturalBaseInches] = await Promise.all([
+	// the story just loses its snowpack clause.
+	const [properties, modelDepthIn] = await Promise.all([
 		getGridpointData(grid),
 		getNaturalSnowDepthInches(resort.lat, resort.lon).catch((err) => {
 			console.error(`Snow depth lookup failed for ${resort.id}:`, err);
@@ -43,29 +43,26 @@ export async function getFreshForecast(resort: Resort, options: ForecastOptions 
 	const conditions = extractConditions(properties, now);
 
 	// Deltas are measured against today's reading, so it has to be in the series.
-	const series = naturalBaseInches === null ? (options.history ?? []) : [...(options.history ?? []), { t: now, d: naturalBaseInches }];
+	const series = modelDepthIn === null ? (options.history ?? []) : [...(options.history ?? []), { t: now, d: modelDepthIn }];
 
-	const past24h = depthChange(series, 24, now);
-	const past48h = depthChange(series, 48, now);
+	const depthChange48h = depthChange(series, 48, now);
+	const snowpackTrend = describeSnowpackTrend(depthChange48h);
 
 	const tier = decideTier({
 		snow48h: conditions.snow48h,
 		tempMaxF: conditions.tempMaxF,
 		windGustMph: conditions.windGustMph,
 		rainRisk: conditions.rainRisk,
-		thawRisk: conditions.thawRisk,
 		snowRatio: conditions.snowRatio,
-		naturalBaseInches,
 	});
 
 	const story = buildStory({
-		resortId: resort.id,
 		tier,
 		snow24h: conditions.snow24h,
 		snow48h: conditions.snow48h,
-		past48h,
-		naturalBaseInches,
+		depthChange48h,
 		tempMaxF: conditions.tempMaxF,
+		tempMinF: conditions.tempMinF,
 		windGustMph: conditions.windGustMph,
 		snowRatio: conditions.snowRatio,
 	});
@@ -74,9 +71,9 @@ export async function getFreshForecast(resort: Resort, options: ForecastOptions 
 		resort,
 		grid,
 		conditions,
-		naturalBaseInches,
-		past24h,
-		past48h,
+		snowpackTrend,
+		modelDepthIn,
+		depthChange48h,
 		tier,
 		story,
 		updateTime: properties.updateTime ?? null,

@@ -1,263 +1,157 @@
 /**
  * Turning a verdict and some numbers into a sentence a skier can act on.
  *
- * Two rules shape everything here.
- *
- * Variants are chosen by a hash of the resort id, not at random. The page must
- * read the same on a refresh, and forty-one rows must not all open with the
- * same four words.
+ * The register is deliberately technical and the phrasing is deliberately
+ * repetitive. Two resorts with the same conditions should read the same way:
+ * this is a weather readout, not copy, and a reader comparing forty-one rows
+ * is served better by consistent wording than by variety. That is why there is
+ * no variant selection here.
  *
  * Missing data removes a clause, it never fills one. Depth history does not
- * exist for the first two days after a deploy, NOHRSC returns nothing over
- * some pixels, and density is unknowable at small totals. Every one of those
- * has to produce a shorter sentence rather than the word "undefined".
+ * exist for the first two days after a deploy, density is unknowable at small
+ * totals, and some gridpoints carry no wind series. Every one of those has to
+ * produce a shorter sentence rather than the word "undefined".
+ *
+ * Nothing here states a snow depth. See verdict.ts for why.
  */
 
-import { describeDensity, isWindHold, type Tier } from './verdict';
+import { describeDensity, describeSnowpackTrend, isWindHold, type Tier } from './verdict';
 
 export type StoryInput = {
-	resortId: string;
 	tier: Tier;
 	snow24h: number;
 	snow48h: number;
-	past48h: number | null;
-	naturalBaseInches: number | null;
+	depthChange48h: number | null;
 	tempMaxF: number | null;
+	tempMinF: number | null;
 	windGustMph: number | null;
 	snowRatio: number | null;
-	timeZone?: string;
 };
 
-/** Stable per-resort seed, so the same hill keeps the same voice. */
-function seedFrom(id: string): number {
-	let h = 2166136261;
-	for (let i = 0; i < id.length; i++) {
-		h ^= id.charCodeAt(i);
-		h = Math.imul(h, 16777619) >>> 0;
-	}
-	return h;
-}
-
-/** Salt keeps one resort from landing on the same index in every slot. */
-function pick<T>(options: T[], seed: number, salt: number): T {
-	return options[(seed + salt) % options.length];
-}
-
 const inches = (n: number) => `${n}"`;
+const degrees = (n: number) => `${n}°F`;
 
-function dayAfterTomorrow(timeZone: string): string {
-	const d = new Date(Date.now() + 48 * 3_600_000);
-	return new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone }).format(d);
+/** What is forecast to fall, and over what window. */
+function accumulationClause(input: StoryInput): string | null {
+	const { tier, snow24h, snow48h } = input;
+
+	if (tier === 'RAIN') return null;
+
+	if (snow48h <= 0) return 'No accumulation forecast through 48 hours.';
+
+	if (snow24h > 0 && snow24h < snow48h) {
+		return `${inches(snow48h)} forecast over 48 hours, ${inches(snow24h)} of it within 24.`;
+	}
+
+	return `${inches(snow48h)} forecast over 48 hours.`;
 }
 
-/** The opening clause: what is happening, and what already happened. */
-function leadClause(input: StoryInput, seed: number, day: string): string {
-	const { tier, snow24h, snow48h, past48h, naturalBaseInches, tempMaxF } = input;
+/** Temperature, and what it does to the surface. */
+function temperatureClause(input: StoryInput): string | null {
+	const { tier, tempMaxF, tempMinF } = input;
+
+	if (tempMaxF === null) return null;
 
 	if (tier === 'RAIN') {
-		return pick(
-			[
-				tempMaxF !== null ? `Rain likely at ${tempMaxF}°.` : 'Rain likely.',
-				'Precipitation arriving as rain, not snow.',
-				tempMaxF !== null ? `Wet and warm at ${tempMaxF}°, falling as rain.` : 'Falling as rain, not snow.',
-			],
-			seed,
-			0,
-		);
+		return `Precipitation falling as rain at ${degrees(tempMaxF)}. Expect existing snow to deteriorate.`;
 	}
 
 	if (tier === 'THAW') {
-		return pick(
-			[
-				tempMaxF !== null ? `Highs near ${tempMaxF}° over the next two days.` : 'Above freezing over the next two days.',
-				tempMaxF !== null ? `Warming to ${tempMaxF}°, and what is there will soften.` : 'Warming, and what is there will soften.',
-				tempMaxF !== null ? `Running ${tempMaxF}° through ${day}.` : `Above freezing through ${day}.`,
-			],
-			seed,
-			1,
-		);
+		// Softening follows from the temperature. Whether it refreezes depends on
+		// the overnight low, so that is only claimed when the low supports it.
+		const refreeze = tempMinF !== null && tempMinF < 32 ? ' Expect refreeze overnight.' : '';
+		return `Maximum ${degrees(tempMaxF)}, above freezing. Expect surface softening.${refreeze}`;
 	}
 
-	if (tier === 'THIN') {
-		const base = naturalBaseInches !== null ? inches(naturalBaseInches) : null;
-		return pick(
-			[
-				base ? `Only ${base} of natural snow and nothing coming.` : 'Thin natural cover and nothing coming.',
-				base ? `${base} of natural snow on the ground, with nothing in the forecast.` : 'Little natural snow, and nothing in the forecast.',
-				base ? `Natural cover down to ${base}, no new snow through ${day}.` : `Thin cover, no new snow through ${day}.`,
-			],
-			seed,
-			2,
-		);
+	if (tempMaxF > 34) {
+		return `Maximum reaches ${degrees(tempMaxF)}; expect accumulation to settle.`;
 	}
 
-	if (snow48h <= 0) {
-		const quietBase = naturalBaseInches !== null ? inches(naturalBaseInches) : null;
-
-		// A quiet forecast still deserves a sentence: what is on the ground is
-		// the whole answer when nothing is falling.
-		if (quietBase) {
-			return pick(
-				[
-					`Nothing in the forecast, ${quietBase} of natural snow on the ground.`,
-					`No new snow in the next two days. ${quietBase} of natural cover holding.`,
-					`Quiet through ${day}, sitting on ${quietBase} of natural snow.`,
-				],
-				seed,
-				3,
-			);
-		}
-
-		return pick(['Nothing in the forecast.', 'No new snow in the next two days.', `Quiet through ${day}.`], seed, 3);
+	if (tempMinF !== null) {
+		return `Temperatures ${degrees(tempMinF)} to ${degrees(tempMaxF)}.`;
 	}
 
-	// Something is falling. Lead with what already landed when we know it.
-	if (past48h !== null && past48h > 0) {
-		return pick(
-			[
-				`${inches(past48h)} already down in two days, ${inches(snow48h)} more by ${day}.`,
-				`${inches(past48h)} over the past two days with another ${inches(snow48h)} coming.`,
-				`Up ${inches(past48h)} in two days, with ${inches(snow48h)} still to come.`,
-			],
-			seed,
-			4,
-		);
-	}
-
-	if (snow24h > 0 && snow24h < snow48h) {
-		return pick(
-			[
-				`${inches(snow48h)} forecast over two days, ${inches(snow24h)} of it by tomorrow night.`,
-				`${inches(snow24h)} in the next 24 hours, ${inches(snow48h)} through ${day}.`,
-				`${inches(snow48h)} on the way, ${inches(snow24h)} of that arriving first.`,
-			],
-			seed,
-			5,
-		);
-	}
-
-	return pick(
-		[
-			`${inches(snow48h)} forecast through ${day}.`,
-			`${inches(snow48h)} on the way.`,
-			`Expecting ${inches(snow48h)} over the next two days.`,
-		],
-		seed,
-		6,
-	);
+	return `Maximum ${degrees(tempMaxF)}.`;
 }
 
-/** The middle clause: how that snow will actually behave. */
-function densityClause(input: StoryInput, seed: number): string | null {
-	const { tier, snow48h, tempMaxF, snowRatio } = input;
+/** Density, stated as the ratio and its consequence. */
+function densityClause(input: StoryInput): string | null {
+	const { tier, snow48h, snowRatio } = input;
 
-	if (snow48h <= 0 || tier === 'RAIN' || tier === 'THAW' || tier === 'THIN') return null;
+	if (snow48h <= 0 || tier === 'RAIN' || tier === 'THAW') return null;
 
 	const density = describeDensity(snowRatio);
-
-	// When it is warm enough that the caution clause will call it out, leave the
-	// number to that clause. Saying "holding at 36" and then "it does touch 36"
-	// in consecutive sentences reads like a bug, because it is one.
-	const tempIsAProblem = tempMaxF !== null && tempMaxF > 34;
-	const temp = tempMaxF !== null && !tempIsAProblem ? `${tempMaxF}°` : null;
+	if (!density || snowRatio === null) return null;
 
 	if (density === 'light') {
-		return pick(
-			[
-				temp ? `Light and dry at ${temp}.` : 'Light and dry.',
-				snowRatio !== null ? `Cold and low density, close to ${snowRatio} to 1.` : 'Cold and low density.',
-				temp ? `Dry snow at ${temp}, it will blow around.` : 'Dry enough that it will blow around.',
-			],
-			seed,
-			7,
-		);
+		return `Snow-to-liquid ratio near ${snowRatio}:1, low density: limited coverage per inch and subject to wind transport.`;
 	}
 
 	if (density === 'dense') {
-		return pick(
-			[
-				temp ? `Dense and heavy at ${temp}, it will cover firm snow well.` : 'Dense and heavy, it will cover firm snow well.',
-				'Wet, high-density snow that should fill in the groom.',
-				temp ? `Heavy snow at ${temp}, better coverage than the number suggests.` : 'Heavy snow, better coverage than the number suggests.',
-			],
-			seed,
-			8,
-		);
+		return `Snow-to-liquid ratio near ${snowRatio}:1, high density: greater coverage per inch over firm surfaces.`;
 	}
 
-	if (!temp) return null;
-
-	return pick([`Holding at ${temp}.`, `Temperatures steady at ${temp}.`, `Staying around ${temp}.`], seed, 9);
-}
-
-/** The closing clause: the thing that could still spoil it. */
-function cautionClause(input: StoryInput, seed: number): string | null {
-	const { tier, snow48h, naturalBaseInches, tempMaxF, windGustMph } = input;
-
-	if (isWindHold(windGustMph)) {
-		return pick([`Gusts to ${windGustMph} could put lifts on hold.`, `Wind gusting ${windGustMph}, expect lift holds.`], seed, 10);
-	}
-
-	// Snow is coming but it is landing on very little.
-	if (snow48h >= 3 && naturalBaseInches !== null && naturalBaseInches < 10) {
-		return pick(
-			[`Natural base is still only ${inches(naturalBaseInches)}.`, `Thin underneath it at ${inches(naturalBaseInches)} natural.`],
-			seed,
-			11,
-		);
-	}
-
-	// Warm enough to matter, but snow won the verdict.
-	if (snow48h >= 3 && tempMaxF !== null && tempMaxF > 34) {
-		return pick(
-			[`Highs reach ${tempMaxF}° though, so expect it to set up.`, `It does touch ${tempMaxF}°, so it will not stay soft.`],
-			seed,
-			12,
-		);
-	}
-
-	if (tier === 'RAIN') {
-		return pick(['Expect it to strip the surface.', 'Whatever is there will take a hit.'], seed, 13);
-	}
-
-	if (tier === 'THIN') {
-		return pick(['Check the resort before you drive.', 'Worth a call before committing to the drive.'], seed, 14);
-	}
-
+	// Average density tells the reader nothing they can act on. Only the ends
+	// of the range change how the snow will ski, so only those get a sentence.
 	return null;
 }
 
-export function buildStory(input: StoryInput): string {
-	const seed = seedFrom(input.resortId);
-	const day = dayAfterTomorrow(input.timeZone ?? 'America/Detroit');
+/**
+ * Which way the modelled snowpack is moving. Direction only, never a figure:
+ * the underlying model is not accurate enough at this scale to quantify.
+ */
+function snowpackClause(input: StoryInput): string | null {
+	const trend = describeSnowpackTrend(input.depthChange48h);
+	if (!trend) return null;
 
-	return [leadClause(input, seed, day), densityClause(input, seed), cautionClause(input, seed)].filter(Boolean).join(' ');
+	if (trend === 'building') return 'Modelled snowpack increasing over the past 48 hours.';
+	if (trend === 'losing') return 'Modelled snowpack decreasing over the past 48 hours.';
+
+	// "Unchanged" is a sentence that appears on most rows most of the time and
+	// carries no information. Omitted.
+	return null;
 }
 
 /**
- * The line above the list: where to go, in one sentence.
+ * Wind, stated as a measurement only.
  *
- * Built from the whole set rather than per resort, so it can say "the Western
- * UP" instead of naming a hill nobody outside the Keweenaw has heard of.
+ * Earlier drafts added "lift holds possible". Whether a lift holds is the
+ * resort's operational call, made on their own thresholds and their own
+ * anemometers, and this tool has no business predicting it. The gust figure is
+ * the fact; readers who know what it means for a given hill can draw the
+ * conclusion themselves.
+ */
+function windClause(input: StoryInput): string | null {
+	if (!isWindHold(input.windGustMph)) return null;
+	return `Gusts to ${input.windGustMph} mph.`;
+}
+
+export function buildStory(input: StoryInput): string {
+	return [accumulationClause(input), temperatureClause(input), densityClause(input), snowpackClause(input), windClause(input)]
+		.filter(Boolean)
+		.join(' ');
+}
+
+/**
+ * The line above the list: where conditions are best, in one sentence.
+ *
+ * Built from the whole set rather than per resort, so it can name a region
+ * instead of a single hill.
  */
 export type SummaryResort = {
 	name: string;
 	region: string;
 	tier: Tier;
 	snow48h: number;
-	naturalBaseInches: number | null;
-	tempMaxF: number | null;
 };
 
-export function buildSummary(resorts: SummaryResort[], timeZone = 'America/Detroit'): string {
-	if (!resorts.length) return 'No forecast available right now.';
+export function buildSummary(resorts: SummaryResort[]): string {
+	if (!resorts.length) return 'No forecast data available.';
 
-	const day = dayAfterTomorrow(timeZone);
 	const ranked = [...resorts].sort((a, b) => b.snow48h - a.snow48h);
 
 	// Score each region by its best three resorts, not its single best. One hill
-	// catching a freak band should not send the whole state to the wrong half of
-	// the map, which is what a plain maximum does.
+	// catching a freak band should not speak for half the state.
 	const byRegion = new Map<string, number[]>();
 	for (const r of resorts) {
 		if (!byRegion.has(r.region)) byRegion.set(r.region, []);
@@ -275,40 +169,30 @@ export function buildSummary(resorts: SummaryResort[], timeZone = 'America/Detro
 		}
 	}
 
-	// Lead with the best resort inside the region that is actually doing best.
 	const leader = ranked.find((r) => r.region === bestRegion) ?? ranked[0];
-
 	const parts: string[] = [];
 
 	if (leader.snow48h >= 3) {
-		parts.push(`The ${leader.region} is the call.`);
-		parts.push(`${leader.name} leads with ${inches(leader.snow48h)} forecast over two days.`);
+		parts.push(
+			`Highest forecast accumulation is in the ${leader.region}, led by ${leader.name} at ${inches(leader.snow48h)} over 48 hours.`,
+		);
 	} else if (leader.snow48h > 0) {
-		parts.push(`Not much moving. ${leader.name} has the most coming at ${inches(leader.snow48h)}.`);
+		parts.push(`Minimal accumulation statewide. ${leader.name} has the highest forecast at ${inches(leader.snow48h)} over 48 hours.`);
 	} else {
-		const deepest = [...resorts]
-			.filter((r) => r.naturalBaseInches !== null)
-			.sort((a, b) => (b.naturalBaseInches ?? 0) - (a.naturalBaseInches ?? 0))[0];
-
-		if (deepest?.naturalBaseInches) {
-			parts.push(`Nothing significant in the forecast through ${day}.`);
-			parts.push(`${deepest.name} holds the deepest natural base at ${inches(deepest.naturalBaseInches)}.`);
-		} else {
-			parts.push(`Nothing significant in the forecast through ${day}.`);
-		}
+		parts.push('No significant accumulation forecast statewide over the next 48 hours.');
 	}
 
 	const wetRegions = [...new Set(resorts.filter((r) => r.tier === 'RAIN').map((r) => r.region))];
 	const warmRegions = [...new Set(resorts.filter((r) => r.tier === 'THAW').map((r) => r.region))];
 
 	if (wetRegions.length === 1) {
-		parts.push(`Rain is moving through the ${wetRegions[0]}.`);
+		parts.push(`Rain forecast in the ${wetRegions[0]}.`);
 	} else if (wetRegions.length > 1) {
-		parts.push('Rain is moving through the southern half of the state.');
+		parts.push(`Rain forecast in ${wetRegions.length} of 4 regions.`);
 	} else if (warmRegions.length >= 3) {
-		parts.push('Warm across most of the state.');
+		parts.push('Temperatures above freezing across most of the state.');
 	} else if (warmRegions.length) {
-		parts.push(`Above freezing in the ${warmRegions[0]}.`);
+		parts.push(`Temperatures above freezing in the ${warmRegions[0]}.`);
 	}
 
 	return parts.join(' ');

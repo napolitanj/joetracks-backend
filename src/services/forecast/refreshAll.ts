@@ -76,8 +76,6 @@ function toSummaryRow(data: any): SummaryResort {
 		region: data.resort.region,
 		tier: data.tier,
 		snow48h: data.snow48h,
-		naturalBaseInches: data.naturalBaseInches ?? null,
-		tempMaxF: data.tempMaxF ?? null,
 	};
 }
 
@@ -117,7 +115,7 @@ export async function refreshRegion(env: Env, region: Region) {
 
 			succeeded++;
 			fresh[id] = data;
-			depthsThisRun[id] = data.naturalBaseInches;
+			depthsThisRun[id] = data._modelSnowDepthIn;
 
 			await env.WEATHER_CACHE.put(`forecast:${id}`, JSON.stringify(data), {
 				expirationTtl: FORECAST_TTL_SECONDS,
